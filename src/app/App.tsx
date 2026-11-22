@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Fish,
   BookOpen,
@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   X,
   Compass,
+  Accessibility,
 } from "lucide-react";
 import { isBusy } from "../shared/initial";
 import { WaterPanel, WaterConditions, water } from "../features/waters";
@@ -16,13 +17,57 @@ import { BaitPanel, RigPanel } from "../features/tackle";
 import { LakeScene, FishingPanel } from "../features/fishing";
 import { CollectionPanel } from "../features/collection";
 import { ChallengePanel, TripStats } from "../features/challenges";
+import {
+  AssistDock,
+  AssistPanel,
+  loadAssistProfile,
+  saveAssistProfile,
+  useAssist,
+} from "../features/assist";
 import { useGame } from "./useGame";
 export function App() {
   const { state, send, saved } = useGame();
   const { doc, session } = state;
   const [help, setHelp] = useState(false);
+  const [assistOpen, setAssistOpen] = useState(false);
+  const [assistProfile, setAssistProfile] = useState(loadAssistProfile);
+  const [assistSaved, setAssistSaved] = useState(true);
   const busy = isBusy(session);
   const place = water(doc.spot);
+  const assist = useAssist(assistProfile, doc, session, send);
+  const assistResult = assist.result;
+
+  // 启用方案时，把受 strikeCap 约束的辅助规则同步进游戏（不改变鱼的冲刺）
+  const appliedExt = useRef(-1);
+  useEffect(() => {
+    const ext =
+      assistProfile.enabled && assistResult.ok
+        ? assistResult.strike.appliedExtension
+        : 0;
+    if (ext !== appliedExt.current || doc.assistStrikeExt !== ext) {
+      appliedExt.current = ext;
+      send({
+        type: "assist-config",
+        strikeExt: ext,
+        autoCast: assistProfile.enabled && assistResult.ok && assistProfile.autoCastAtPeak,
+        autoRelief: assistProfile.enabled && assistResult.ok && assistProfile.autoRelief,
+      });
+    }
+  }, [
+    assistProfile.enabled,
+    assistProfile.autoCastAtPeak,
+    assistProfile.autoRelief,
+    assistResult.ok,
+    assistResult.strike.appliedExtension,
+    doc.assistStrikeExt,
+    send,
+  ]);
+
+  const handleSaveAssist = (p: typeof assistProfile) => {
+    setAssistProfile(p);
+    setAssistSaved(saveAssistProfile(p));
+    if (!p.enabled) setAssistOpen(false);
+  };
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -56,6 +101,17 @@ export function App() {
             <Check size={12} />
             {saved ? "手记已保存" : "本地保存不可用"}
           </span>
+          <button
+            className={
+              "icon-btn assist-entry " + (assistProfile.enabled ? "active" : "")
+            }
+            aria-label="单键辅助方案"
+            aria-pressed={assistOpen}
+            onClick={() => setAssistOpen((v) => !v)}
+            title="单键辅助方案"
+          >
+            <Accessibility size={19} />
+          </button>
           <button
             aria-label="垂钓指南"
             className="icon-btn"
@@ -115,7 +171,12 @@ export function App() {
                 <div className="scene-label">STILLNESS IS A KIND OF JOY.</div>
               </div>
               <WaterConditions spot={doc.spot} />
-              <FishingPanel doc={doc} session={session} send={send} />
+              <FishingPanel
+                doc={doc}
+                session={session}
+                send={send}
+                keyboardSuppressed={assistProfile.enabled && assistResult.ok}
+              />
             </section>
             <div className="equipment-row">
               <BaitPanel doc={doc} busy={busy} send={send} />
@@ -129,6 +190,13 @@ export function App() {
               </p>
               <ArrowUpRight size={18} />
             </div>
+            {assistOpen && (
+              <AssistPanel
+                profile={assistProfile}
+                onSave={handleSaveAssist}
+                saved={assistSaved}
+              />
+            )}
           </div>
           <aside className="right-column">
             <div id="collection">
@@ -155,6 +223,23 @@ export function App() {
           {state.notice}
         </div>
       )}
+      <AssistDock
+        profile={assistProfile}
+        result={assistResult}
+        session={session}
+        menu={assist.menu}
+        menuItems={assist.menuItems}
+        pending={assist.pending}
+        status={assist.status}
+        flash={assist.flash}
+        activeGroup={assist.activeGroup}
+        onDown={assist.onDown}
+        onUp={assist.onUp}
+        onAccept={assist.acceptPending}
+        onCancel={assist.cancelPending}
+        onRetry={assist.retryInput}
+        onCloseMenu={assist.closeMenu}
+      />
       {help && (
         <div className="modal-backdrop" onClick={() => setHelp(false)}>
           <section

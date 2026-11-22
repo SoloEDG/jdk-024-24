@@ -2,6 +2,9 @@ import type { Session, GameDocument } from "../../../shared/types";
 import { species } from "../../../shared/catalog";
 import { clamp } from "../../../shared/random";
 import { fightStep } from "../lib/physics";
+
+/** 咬钩后原始提竿窗口（秒） */
+export const GAME_BITE_WINDOW = 4;
 export function tickSession(
   s: Session,
   doc: GameDocument,
@@ -25,7 +28,9 @@ export function tickSession(
   }
   if (s.phase === "bite") {
     const clock = s.clock + dt;
-    return clock - s.biteAt > 4
+    // 辅助规则允许的提竿窗口延长（受玩家上限约束），不改变鱼的冲刺节奏
+    const biteWindow = GAME_BITE_WINDOW + (doc.assistStrikeExt ?? 0);
+    return clock - s.biteAt > biteWindow
       ? {
           ...s,
           clock,

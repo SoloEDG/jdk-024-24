@@ -13,6 +13,32 @@ import {
 import { prepareCast, tickSession, strike } from "../features/fishing";
 import { landCatch, releaseCatch } from "../features/collection";
 import { claimReward } from "../features/challenges";
+
+/** 自动缓线触发张力阈值：与物理模型的过载线 0.87 对齐并提前一点 */
+const RELIEF_TENSION = 0.85;
+
+function runCast(state: Workspace): Workspace {
+  const { doc, session: s } = state;
+  if (s.phase !== "charging") return state;
+  const consumed = consumeBait(doc);
+  if (!consumed) return state;
+  const cast = prepareCast(
+    doc,
+    s.charge,
+    attraction(doc.spot, doc.bait),
+    (r) => biteDelay(doc.bait, r),
+  );
+  return {
+    ...state,
+    doc: {
+      ...consumed,
+      seed: cast.seed,
+      stats: { ...doc.stats, casts: doc.stats.casts + 1 },
+    },
+    session: cast.session,
+  };
+}
+
 export function gameReducer(state: Workspace, c: Command): Workspace {
   const { doc, session: s } = state;
   const busy = isBusy(s);
@@ -44,26 +70,8 @@ export function gameReducer(state: Workspace, c: Command): Workspace {
             },
           }
         : state;
-    case "cast": {
-      if (s.phase !== "charging") return state;
-      const consumed = consumeBait(doc);
-      if (!consumed) return state;
-      const cast = prepareCast(
-        doc,
-        s.charge,
-        attraction(doc.spot, doc.bait),
-        (r) => biteDelay(doc.bait, r),
-      );
-      return {
-        ...state,
-        doc: {
-          ...consumed,
-          seed: cast.seed,
-          stats: { ...doc.stats, casts: doc.stats.casts + 1 },
-        },
-        session: cast.session,
-      };
-    }
+    case "cast":
+      return runCast(state);
     case "strike":
       return { ...state, session: strike(s) };
     case "reel":
@@ -71,7 +79,27 @@ export function gameReducer(state: Workspace, c: Command): Workspace {
         ? { ...state, session: { ...s, reeling: c.held } }
         : state;
     case "tick": {
-      const next = tickSession(s, doc, Math.min(0.1, Math.max(0, c.dt)));
+      // 单键辅助：蓄力到峰值自动抛竿（不改变蓄力节奏，仅替玩家完成第二次按键）
+      if (s.phase === "charging" && doc.assistAutoCast) {
+        const preview = tickSession(s, doc, Math.min(0.1, Math.max(0, c.dt)));
+        if (preview.charge < s.charge && s.charge > 0.98) {
+          const casted = runCast(state);
+          if (casted !== state) return casted;
+        }
+      }
+      const next0 = tickSession(
+        s,
+        doc,
+        Math.min(0.1, Math.max(0, c.dt)),
+      );
+      // 单键辅助：张力过高自动松线缓线，绝不代替玩家按收线
+      const next =
+        next0.phase === "fighting" &&
+        doc.assistAutoRelief &&
+        next0.reeling &&
+        next0.tension >= RELIEF_TENSION
+          ? { ...next0, reeling: false }
+          : next0;
       if (next === s) return state;
       let updated = doc;
       if (next.phase === "landed" && s.phase !== "landed")
@@ -91,5 +119,15 @@ export function gameReducer(state: Workspace, c: Command): Workspace {
       return { ...state, doc: releaseCatch(doc, c.id) };
     case "claim":
       return { ...state, doc: claimReward(doc, c.id) };
+    case "assist-config":
+      return {
+        ...state,
+        doc: {
+          ...doc,
+          assistStrikeExt: Math.max(0, c.strikeExt),
+          assistAutoCast: c.autoCast,
+          assistAutoRelief: c.autoRelief,
+        },
+      };
   }
 }

@@ -43,6 +43,12 @@ export interface GameDocument {
   journal: Partial<Record<FishId, JournalEntry>>;
   stats: { casts: number; catches: number; escapes: number; released: number };
   claimed: string[];
+  /** 单键辅助采用的提竿窗口延长（受玩家 strikeCap 约束，0 表示不延长） */
+  assistStrikeExt: number;
+  /** 单键辅助：蓄力到峰值自动抛竿 */
+  assistAutoCast: boolean;
+  /** 单键辅助：张力过高自动松线缓线 */
+  assistAutoRelief: boolean;
 }
 export interface Session {
   id: string;

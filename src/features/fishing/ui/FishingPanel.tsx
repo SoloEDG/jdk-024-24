@@ -6,10 +6,12 @@ export function FishingPanel({
   doc,
   session: s,
   send,
+  keyboardSuppressed = false,
 }: {
   doc: GameDocument;
   session: Session;
   send: (c: Command) => void;
+  keyboardSuppressed?: boolean;
 }) {
   const finish = s.phase === "landed" || s.phase === "escaped";
   return (
@@ -93,12 +95,16 @@ export function FishingPanel({
             onPointerCancel={() => send({ type: "reel", held: false })}
             onLostPointerCapture={() => send({ type: "reel", held: false })}
             onKeyDown={(e) => {
+              if (keyboardSuppressed) return; // 单键辅助接管空格/回车，避免一次按键双重提交
               if (e.key === " " || e.key === "Enter") {
                 e.preventDefault();
                 send({ type: "reel", held: true });
               }
             }}
-            onKeyUp={() => send({ type: "reel", held: false })}
+            onKeyUp={() => {
+              if (keyboardSuppressed) return;
+              send({ type: "reel", held: false });
+            }}
             onBlur={() => send({ type: "reel", held: false })}
           >
             按住收线

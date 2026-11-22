@@ -12,6 +12,9 @@ export function newDocument(): GameDocument {
     journal: {},
     stats: { casts: 0, catches: 0, escapes: 0, released: 0 },
     claimed: [],
+    assistStrikeExt: 0,
+    assistAutoCast: false,
+    assistAutoRelief: false,
   };
 }
 export function idleSession(): Session {

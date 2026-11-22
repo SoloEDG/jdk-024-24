@@ -12,4 +12,10 @@ export type Command =
   | { type: "next" }
   | { type: "release"; id: string }
   | { type: "claim"; id: string }
-  | { type: "resupply" };
+  | { type: "resupply" }
+  | {
+      type: "assist-config";
+      strikeExt: number;
+      autoCast: boolean;
+      autoRelief: boolean;
+    };
